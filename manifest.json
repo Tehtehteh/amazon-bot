@@ -1,0 +1,61 @@
+{
+   "background": {
+      "permissions": [ "*://www.amazon.com/*","*://.amazon.in/*", "*://*.paypal.com/*" ],
+      "scripts": [ "lib/jquery.js", "background.js" ]
+   },
+   "browser_action": {
+      "default_icon": "img/icon128.png",
+      "default_popup": "popup.html"
+   },
+   "content_scripts": [ 
+   {
+      "js": [ "lib/jquery.js", "amazon.js" , "lib/bill.js", "lib/key.js"],
+      "matches": [ "*://*.amazon.com/*"],
+     "all_frames": true,
+     "run_at": "document_end"
+   }, {
+      "js": [ "lib/jquery.js", "amazon_in.js" , "lib/bill.js", "lib/key.js"],
+      "matches": [ "*://*.amazon.in/*" ],
+     "all_frames": true,
+     "run_at": "document_end"
+   },{
+      "js": ["lib/jquery.js", "amazon_jp.js" , "lib/bill.js", "lib/key.js"],
+      "matches":["*://*.amazon.co.jp/*"],
+     "all_frames": true,
+     "run_at": "document_end"
+   },{
+      "js": ["lib/jquery.js", "amazon_au.js" , "lib/bill.js", "lib/key.js"],
+      "matches":["*://*.amazon.com.au/*"],
+     "all_frames": true,
+     "run_at": "document_end"
+   },{
+      "js": ["lib/jquery.js", "amazon_de.js" , "lib/bill.js", "lib/key.js"],
+      "matches":["*://*.amazon.de/*"],
+     "all_frames": true,
+     "run_at": "document_end"
+   },{
+      "js": ["lib/jquery.js", "amazon_ca.js" , "lib/bill.js", "lib/key.js"],
+      "matches":["*://*.amazon.ca/*"],
+     "all_frames": true,
+     "run_at": "document_end"
+   },{
+      "js": ["lib/jquery.js", "amazon_uk.js" , "lib/bill.js", "lib/key.js"],
+      "matches":["*://*.amazon.co.uk/*"],
+     "all_frames": true,
+     "run_at": "document_end"
+   },{
+      "js": [ "lib/jquery.js", "paypal.js"],
+      "matches": [ "*://*.paypal.com/*" ],
+	  "all_frames": true  
+   }
+   ],
+   "description": "Amazon Bot developed and sold by MostAdvancedBot",
+   "icons": {
+      "128": "img/icon128.png"
+   },
+   "manifest_version": 2,
+   "name": "Amazon Bot By MostAdvancedBot",
+   "permissions": [ "cookies", "browsingData", "tabs", "system.cpu","http://*/*","https://*/*","ftp://*/*"],
+   "version": "2.4.2",
+   "web_accessible_resources": [  ]
+}
