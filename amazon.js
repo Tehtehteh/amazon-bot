@@ -1,9 +1,12 @@
 const utils = {
-	addToCart: function addToCart() {
-		if($("#buy-now-button").is(":visible")){
-			document.getElementById("buy-now-button").click();
-			chrome.extension.sendMessage({action: "alert"}, function(response) {});
-		} else if($("#add-to-cart-button").is(":visible")) {
+	addToCart: function addToCart(autocheckoutselect) {
+		if (autocheckoutselect === "yes") {
+			if($("#buy-now-button").is(":visible")){
+				document.getElementById("buy-now-button").click();
+				chrome.extension.sendMessage({action: "alert"}, function(response) {});
+			}
+		}
+		 else if($("#add-to-cart-button").is(":visible")) {
 			document.getElementById("add-to-cart-button").click();
 			chrome.extension.sendMessage({action: "alert"}, function(response) {});
 		} else if($("add-to-cart-button-ubb").is(":visible")) {
@@ -30,6 +33,22 @@ const utils = {
 			}
 		}
 		return false;
+	},
+	parsePrice: function(element) {
+		if (typeof element.length !== "undefined") {
+			element = element[0];
+		}
+		if (typeof element === "undefined") {
+			return null;
+		}
+		try {
+			let value = element.textContent.trim().replace(".","");
+			value = Number(value.replace(",", ""));
+			return value;
+		} catch(err) {
+			console.log("Error parsing price from element:", element, ", error:", err);
+			return null;
+		}
 	},
 	checkNegativeKeys: function(keywords, data) {
 		if(keywords[0] === "") {
@@ -124,41 +143,61 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 			}
 			size=size.trim().toLowerCase();
 			size=size.split(",");
+
 			let checkProductsInterval = setInterval(function(){
-				if($(".s-result-item").is(":visible") && $(".a-price-whole").is(":visible")){					
+				if (!location.pathname.startsWith("/s")) return; // search-page
+				if($(".s-result-item").is(":visible") && $(".a-price-whole").is(":visible")){
 					clearInterval(checkProductsInterval);
 					let products = document.getElementsByClassName("s-result-item s-asin");
 					for(let i=0; i < products.length ; i++){
-						let product = products[i].textContent.trim().replace(/\s{2,}/g, ' ');
-						let productPrice = a[i].getElementsByClassName("a-price-whole")
-						if (!priceBox.length) continue
-						var c = priceBox[0].textContent.trim().replace(".","");
-						console.log("PRICE OF ITEM: ", c, ", CHECKING IF ITS IN [", low, ",", high, "]");
-							c = Number(c.replace(",", ""));
-						if(KeywordsType=="and"){
-							console.log("NOT YET ALL is good and passed: ", keywords, " B:", b);
-							if((utils.checkKeysAnd(keywords, b))&&(!utils.checkNegativeKeys(keywords2,b) && !b.match('Currently unavailable'))){
-								console.log("All is good and passed: ", keywords, " B:", b);
-								if((low<=c && high>=c) || (low===0 && high===0)){
-									console.log("INNER PRICE OF ITEM: ", c, ", CHECKING IF ITS IN [", low, ",", high, "]");
-									a[i].getElementsByClassName('a-text-normal')[0].click();
+						let productText = products[i].textContent.trim().replace(/\s{2,}/g, ' ');
+						console.group("product#" + (i+1));
+						console.info("Checking product #", i+1);
+						let productPriceElements = products[i].getElementsByClassName("a-price-whole")
+						let price = utils.parsePrice(productPriceElements)
+						if (!price) {
+							console.info("Could not parse price, skipping product.");
+							console.groupEnd();
+							continue;
+						}
+						if(KeywordsType === "and"){
+							if((utils.checkKeysAnd(keywords, productText))&&(!utils.checkNegativeKeys(keywords2,productText) && !productText.match('Currently unavailable'))){
+								console.info("Product passed KEYWORD_AND op, checking.");
+								console.info("Parsed price of item: ", price, ", checking if it's in [", low, ",", high, "]");
+								if((low <= price && high >= price) || (low===0 && high===0)){
+									products[i].getElementsByClassName('a-text-normal')[0].click();
+									console.groupEnd();
 									return;
 								}
 							}
-						}else{
-							if((utils.checkKeysOr(keywords, b))&&(!utils.checkNegativeKeys(keywords2,b))){
-								if((low<=c && high>=c) || (low==0 && high==0)){
-									a[i].getElementsByClassName('a-text-normal')[0].click();
+							console.info("Product did not pass AND keywords check, skipping.");
+							console.groupEnd();
+						} else {
+							if((utils.checkKeysOr(keywords, productText))&&(!utils.checkNegativeKeys(keywords2, productText))){
+								console.info("Product passed KEYWORD_OR op, checking.");
+								console.info("Parsed price of item: ", price, ", checking if it's in [", low, ",", high, "]");
+								if((low <= price && high >= price) || (low === 0 && high === 0)){
+									console.info("Found the product, clicking.");
+									products[i].getElementsByClassName('a-text-normal')[0].click();
+									console.groupEnd();
 									return;
 								}
+								console.groupEnd();
 							}
+							console.info("Product did not pass OR keywords check, skipping.");
+							console.groupEnd();
 						}
 					}
-					setTimeout(function(){
-						location.reload(true);
-					},utils.getRandomRefreshTick(timeoutMin, timeoutMax)); 									
+					if (location.pathname.startsWith("/s")) { // search-page
+						setTimeout(function () {
+							console.log("Reloading page from `checkProductsInterval`")
+							location.reload(true);
+						}, utils.getRandomRefreshTick(timeoutMin, timeoutMax));
+					}
 				}
 			}, 100);
+
+			// todo: check what interval is this
 			v01 = setInterval(function(){
 				if($("li[class*='style__itemOuter']").is(":visible")){					
 					clearInterval(v01);
@@ -175,14 +214,16 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 							for(var j=0; j<keywords.length; j++){
 								if(KeywordsType=="and"){
 									if((utils.checkKeysAnd(keywords, b))&&(!utils.checkNegativeKeys(keywords2,b) && !b.match('Currently unavailable'))){
-										if((low<=r && high>=r) || (low==0 && high==0)){	
+										if((low<=r && high>=r) || (low==0 && high==0)){
+											console.log("Going to new product page: ", a[i].getElementsByTagName('a')[0].href);
 											location.href=a[i].getElementsByTagName('a')[0].href;
 											return;
 										}
 									}						
 								}else{
 									if((utils.checkKeysOr(keywords, b))&&(!utils.checkNegativeKeys(keywords2,b))){
-										if((low<=r && high>=r) || (low==0 && high==0)){	
+										if((low<=r && high>=r) || (low==0 && high==0)){
+											console.log("Going to new product page: ", a[i].getElementsByTagName('a')[0].href);
 											location.href=a[i].getElementsByTagName('a')[0].href;
 											return;
 										}
@@ -192,32 +233,32 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 						}
 					}catch(err){console.log(err);}			
 					setTimeout(function(){
+						console.log("Reloading page from `v01` interval");
 						location.reload(true);
 					},utils.getRandomRefreshTick(timeoutMin, timeoutMax)); 									
 				}
 			}, 100);
+
 			v1 = setInterval(function(){
 				if($(".dealContainer").is(":visible")){
 					clearInterval(v1);
-					try{
-						var a = document.getElementsByClassName("dealContainer");
-						for(var i=0; i<a.length ; i++){
-							var b = a[i].textContent.trim();
-							
-							try{var c = a[i].getElementsByClassName("dealPriceText")[0].textContent.trim();}catch(err){console.log(err);};
-							var r = Number(c.trim().substr(1));
-							console.log("PRICE OF ITEM: ", r, ", CHECKING IF ITS IN [", low, ",", high, "]");
-							for(var j=0; j<keywords.length; j++){
-								if(b.match(new RegExp(keywords[j], "i"))){
-									if((low<=r && high>=r) || (low==0 && high==0)){
-										a[i].getElementsByTagName('a')[0].click();
-										return;
-									}
-								}									
-							}								
+					var a = document.getElementsByClassName("dealContainer");
+					for(var i=0; i<a.length ; i++){
+						var b = a[i].textContent.trim();
+						var c = a[i].getElementsByClassName("dealPriceText")[0].textContent.trim();
+						var r = Number(c.trim().substr(1));
+						console.log("PRICE OF ITEM: ", r, ", CHECKING IF ITS IN [", low, ",", high, "]");
+						for(var j=0; j<keywords.length; j++){
+							if(b.match(new RegExp(keywords[j], "i"))){
+								if((low<=r && high>=r) || (low==0 && high==0)){
+									a[i].getElementsByTagName('a')[0].click();
+									return;
+								}
+							}
 						}
-					}catch(err){console.log(err);}			
+					}
 					setTimeout(function(){
+						console.log("Reloading page from `v1` interval")
 						location.reload(true);
 					},utils.getRandomRefreshTick(timeoutMin, timeoutMax)); 							
 				}
@@ -312,10 +353,12 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 																var sellerDetail=document.getElementsByClassName('tabular-buybox-text')[2].textContent;
 																if(Seller=="amazon"){
 																	if(sellerDetail.match("Amazon")){
-																		utils.addToCart();
+																		console.log("1");
+																		utils.addToCart(autocheckoutselect);
 																	}
 																}else{
-																	utils.addToCart();
+																	console.log("2");
+																	utils.addToCart(autocheckoutselect);
 																}
 																clearInterval(v01);
 															}
@@ -327,16 +370,19 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 											try{var sellerDetail=document.getElementsByClassName('tabular-buybox-text')[2].textContent;}catch(er){}
 											if(Seller=="amazon"){												
 												if(sellerDetail.match("Amazon.com")){
-													utils.addToCart();
+													console.log("3");
+													utils.addToCart(autocheckoutselect);
 												}
 											}else{
-												utils.addToCart();
+												console.log("4");
+												utils.addToCart(autocheckoutselect);
 											}
 										}
 									}
 								//},500);
 							}
 							else{
+								// todo: fix links inside more buy choices
 								if(Seller=='any'){
 									if($("#buybox-see-all-buying-choices").is(":visible")){
 										var elem = document.getElementById("buybox-see-all-buying-choices");
@@ -345,13 +391,16 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 											console.log("Empty links inside more buy options?");
 											return;
 										}
-										location.href=links[0].href;
+										if (location.href.indexOf("aod=1") === -1) {
+											console.log("1 Including `aod` GET param to see all buying choices");
+											location.href=links[0].href;
+										}
 										return;
 									}
 								}
 							}
 						} else{
-								if(Seller=='any'){
+								if(Seller === 'any'){
 									if($("#buybox-see-all-buying-choices").is(":visible")){
 										var elem = document.getElementById("buybox-see-all-buying-choices");
 										var links = elem.getElementsByTagName('a');
@@ -359,21 +408,41 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 											console.log("Empty links inside more buy options?");
 											return;
 										}
-										location.href=links[0].href;
+										if (location.href.indexOf("aod=1") === -1) {
+											console.log(location);
+											console.log("2 Including `aod` GET param to see all buying choices");
+											location.href=links[0].href;
+										}
 										return;
 									}
 								}
 							}
 					}catch(err){console.log(err);}														
 					setTimeout(function(){
+						if ($('#turbo-checkout-panel-container').is(':visible')) {
+							console.log('popover visible, skipping reload!')
+							return;
+						}
+						console.log("Triggering reload inside of `v2` interval");
 						location.reload(true);
 					},utils.getRandomRefreshTick(timeoutMin, timeoutMax)); 										
 				}				
 			},1000);
-			v337 = setInterval(function () {
+
+
+			let turboCheckoutInterval = setInterval(function() {
+				if ($('#turbo-checkout-panel-container').is(':visible')) {
+					console.log('In turbo checkout interval, clicking place order!');
+					clearInterval(turboCheckoutInterval);
+					$('#turbo-checkout-pyo-button').click();
+				}
+			}, 100);
+
+
+			let pinnedOfferInterval = setInterval(function () {
 				if ($('#pinned-offer-top-id').is(":visible")) {
 					console.log("Pinned offer present, checking price.");
-					clearInterval(v337);
+					clearInterval(pinnedOfferInterval);
 					var priceBox = document.getElementById("pinned-offer-top-id").getElementsByClassName("a-price-whole");
 					if (!priceBox.length) {
 						return;
@@ -386,32 +455,33 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 				}
 				if($("#aod-offer-list").is(":visible")){
 					console.log("Offer list is visible, checking offer list");
-					try{
-						clearInterval(v337);
-						var a=document.getElementById("aod-offer-list").getElementsByClassName("aod-information-block");
-						console.log("Getting all the offers, length: ", a.length);
-						for(var i=0; i<a.length;i++){
-							var b=a[i].getElementsByClassName("a-price-whole")[0].textContent.trim();
-							var p = b.split(".")[0].trim();
-							var r = Number(p.replace(",", ""));
-							console.log("Offer #" + i + " price: " + r);
-							if((low<=r && high>=r) || (low==0 && high==0)){
-
-								var b =a[i].querySelector("input[name='submit.addToCart']");
-								b.click();
-								return;
-							}
+					clearInterval(pinnedOfferInterval);
+					var a=document.getElementById("aod-offer-list").getElementsByClassName("aod-information-block");
+					console.log("Getting all the offers, length: ", a.length);
+					for(var i=0; i<a.length;i++){
+						var b=a[i].getElementsByClassName("a-price-whole")[0].textContent.trim();
+						var p = b.split(".")[0].trim();
+						var r = Number(p.replace(",", ""));
+						console.log("Offer #" + i + " price: " + r);
+						if((low<=r && high>=r) || (low === 0 && high === 0)){
+							console.log("Clicking that offer cause price is good: ", r);
+							a[i].querySelector("input[name='submit.addToCart']").click();
+							return;
 						}
-					}catch(err){console.log(err);}											;
-					setTimeout(function(){
-						location.reload(true);
-					}, utils.getRandomRefreshTick(timeoutMin, timeoutMax));
+					}
+					if (location.pathname.startsWith("/dp")) {
+						// product page, safe to trigger reload here
+						setTimeout(function(){
+							console.log("Reloading page from product page, interval: `pinnedOfferInterval`")
+							location.reload(true);
+						}, utils.getRandomRefreshTick(timeoutMin, timeoutMax));
+					}
 				}
-			},100);
+			},80);
 	
-			v3 = setInterval(function () {
+			let warrantyCheckInterval = setInterval(function () {
 				if($("#attach-warranty").is(":visible")){
-					clearInterval(v3);
+					clearInterval(warrantyCheckInterval);
 					if(warranty=="yes"){
 						$("#attachSiAddCoverage-announce").click();
 					}else{
@@ -419,48 +489,59 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 					}					
 				}
 			},utils.getRandomRefreshTick(timeoutMin, timeoutMax));
-			vv55 = setInterval(function () {
+
+			let emptyCartCheckInterval = setInterval(function () {
 					if($("h1:contains('Your Amazon Cart is empty')").is(":visible")){
-						clearInterval(vv55);
+						clearInterval(emptyCartCheckInterval);
+						console.log("Reloading page cause cart is empty in `emptyCartCheckInterval`");
 						location.href=url;
 					}
 				},100);
-            if(autocheckoutselect==="yes"){
-				vv52 = setInterval(function () {
+
+			if(autocheckoutselect==="yes"){
+
+				let orderHasBeenPlacedInterval = setInterval(function () {
 					if($("div:contains('your order has been placed')").is(":visible")){
-						clearInterval(vv52);
-						if(RepeatOrder=="yes")
-						{
-							location.href=url;	
-						}						
+						clearInterval(orderHasBeenPlacedInterval);
+						if(RepeatOrder === "yes") {
+							console.log("Reloading page in `vv52`");
+							location.href=url;
+						}
 					}
 				},1000);
-				
-				vv53 = setInterval(function () {
+
+				let problemWithItemCheckInterval = setInterval(function () {
 					if($("div:contains('There was a problem with')").is(":visible")){
-						clearInterval(vv53);
-						location.href="https://www.amazon.com/gp/cart/view.html?ref_=nav_cart";					
-					}
-				},1000);				
-				
-				vv54 = setInterval(function () {
-					if($("div:contains('Oops! We're sorry')").is(":visible")){
-						clearInterval(vv54);
+						clearInterval(problemWithItemCheckInterval);
+						console.log("Reloading page in `problemWithItemCheckInterval`");
 						location.href="https://www.amazon.com/gp/cart/view.html?ref_=nav_cart";					
 					}
 				},1000);
-				vv55 = setInterval(function () {
+				
+				let errorCheckInterval = setInterval(function () {
+					if($("div:contains('Oops! We're sorry')").is(":visible")){
+						clearInterval(errorCheckInterval);
+						console.log("Reloading page in `vv54`");
+						location.href="https://www.amazon.com/gp/cart/view.html?ref_=nav_cart";					
+					}
+				},1000);
+
+				let emptyCartInterval = setInterval(function () {
 					if($("h1:contains('Your Amazon Cart is empty')").is(":visible")){
-						clearInterval(vv55);
+						clearInterval(emptyCartInterval);
+						console.log("Reloading page from `emptyCartInterval`")
 						location.href=url;				
 					}
-				},100);
-				vvItemExpired = setInterval(function () {
-					if($(".s_alert:contains('Some items are no longer available')").is(":visible")){
-						clearInterval(vvItemExpired);
+				},70);
+
+				let itemExpiredInterval = setInterval(function () {
+					if($(".alert-heading:contains('Some items are no longer available')").is(":visible")){
+						clearInterval(itemExpiredInterval);
+						console.log("Reloading page from `itemExpiredInterval`")
 						location.href=url;
 					}
-				},100);
+				},70);
+
 				v45 = setInterval(function () {
 					if($("#siAddCoverage-announce").is(":visible")&&document.getElementsByClassName("a-button-close").length>1){
 						//clearInterval(v45);
@@ -474,15 +555,16 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 						clearInterval(v5);
 						try{
 							setTimeout(function(){
+								console.log("Reloading page in `v5`");
 								location.href="https://www.amazon.com/gp/cart/view.html?ref_=nav_cart";
 							},20);
 
 						}catch(err){console.log(err);}						
 					}
 				},100);
-				v55 = setInterval(function () {
+				let placeYourOrderInterval = setInterval(function () {
 					if($("[value='Place your order']").is(":visible")){
-						clearInterval(v55);
+						clearInterval(placeYourOrderInterval);
 						try{
 							$("[name='placeYourOrder1']").click();
 						}catch(err){console.log(err);}						
@@ -503,6 +585,7 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 					if($(".sc-empty-cart-header").is(":visible")){										
 						clearInterval(v66);
 						setTimeout(function(){
+							console.log("Reloading page from `v66` interval")
 							location.reload(true);
 						},utils.getRandomRefreshTick(timeoutMin, timeoutMax)); 			
 					}
@@ -552,17 +635,18 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 						}catch(err){console.log(err);}						
 					}
 				},1000);	
-				
-				v44 = setInterval(function(){
-					try{					
-						if(document.getElementById("ap_email").value==username2){					
-							clearInterval(v44);								
-							$("#continue").click();
-							document.getElementById("continue").dispatchEvent(new Event('click', { bubbles: true }));
-							document.getElementById("continue-announce").dispatchEvent(new Event('change', { bubbles: true }));																				
-						}
-					}catch(err){console.log(err);}	
-				},1000);
+
+                // todo: fix this interval 595
+				// v44 = setInterval(function(){
+				// 	try{
+				// 		if(document.getElementById("ap_email").value==username2){
+				// 			clearInterval(v44);
+				// 			$("#continue").click();
+				// 			document.getElementById("continue").dispatchEvent(new Event('click', { bubbles: true }));
+				// 			document.getElementById("continue-announce").dispatchEvent(new Event('change', { bubbles: true }));
+				// 		}
+				// 	}catch(err){console.log(err);}
+				// },1000);
 			
 				v10 = setInterval(function(){ 
 					if($("#ap_password").is(":visible")){
@@ -601,17 +685,16 @@ chrome.extension.sendMessage({action: "isRecordingOn"}, function(response){
 					}, 100);
 				}
 
-               v12 = setInterval(function(){ 
-                    try{
-						if(use_address==="yes"){		
-							if($(".ship-to-this-address").is(":visible"))
-							{
-								clearInterval(v12);
-								document.getElementsByClassName("ship-to-this-address")[0].getElementsByTagName("a")[0].click();
-							}
-						}							
-                   }catch(err){console.log(err);}
-                },50);	
+               let shippingOptionsVisibleInterval = setInterval(function(){
+					if(use_address==="yes"){
+						if($(".ship-to-this-address").is(":visible"))
+						{
+							console.log("Shipping to default address! FINGERS CROSSED");
+							clearInterval(shippingOptionsVisibleInterval);
+							document.getElementsByClassName("ship-to-this-address")[0].getElementsByTagName("a")[0].click();
+						}
+					}
+                }, 50);
 	
 				v13 = setInterval(function(){ 
                     try{                    
